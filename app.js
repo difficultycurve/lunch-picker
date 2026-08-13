@@ -38,6 +38,7 @@ const els = {
   addForm: $("#addForm"), menuList: $("#menuList"), resetButton: $("#resetButton"),
   historySection: $("#historySection"), historyList: $("#historyList"), clearHistoryButton: $("#clearHistoryButton"),
   shareButton: $("#shareButton"), shareDialog: $("#shareDialog"), shareLink: $("#shareLink"),
+  shareMenuToggle: $("#shareMenuToggle"),
   copyLinkButton: $("#copyLinkButton"), toast: $("#toast"), importButton: $("#importButton"),
   importDialog: $("#importDialog"), closeImportButton: $("#closeImportButton"), pastePanel: $("#pastePanel"),
   imagePanel: $("#imagePanel"), orderText: $("#orderText"), parseTextButton: $("#parseTextButton"),
@@ -228,18 +229,25 @@ function resetFoods() {
   showToast("已恢复默认饭单");
 }
 
-function createShareUrl() {
+function createShareUrl(includeMenu = false) {
+  const url = new URL(location.href);
+  url.search = "";
+  url.hash = "";
+  if (!includeMenu) return url.toString();
   const compact = foods.map(({ name, category, emoji }) => ({ name, category, emoji }));
   const bytes = encodeURIComponent(JSON.stringify(compact)).replace(/%([0-9A-F]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
   const encoded = btoa(bytes).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-  const url = new URL(location.href);
-  url.search = "";
   url.searchParams.set("menu", encoded);
   return url.toString();
 }
 
+function updateShareLink() {
+  els.shareLink.value = createShareUrl(els.shareMenuToggle.checked);
+}
+
 function openShare() {
-  els.shareLink.value = createShareUrl();
+  els.shareMenuToggle.checked = false;
+  updateShareLink();
   els.shareDialog.showModal();
 }
 
@@ -426,6 +434,7 @@ els.clearHistoryButton.addEventListener("click", () => {
 });
 els.shareButton.addEventListener("click", openShare);
 els.copyLinkButton.addEventListener("click", copyShareLink);
+els.shareMenuToggle.addEventListener("change", updateShareLink);
 els.shareDialog.addEventListener("click", event => {
   if (event.target === els.shareDialog) els.shareDialog.close();
 });

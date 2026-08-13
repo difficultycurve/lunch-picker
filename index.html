@@ -118,7 +118,7 @@
       </button>
       <div class="dialog-icon"><i data-lucide="users" aria-hidden="true"></i></div>
       <h2>叫上饭搭子</h2>
-      <p>链接里带着你现在的候选菜单。伙伴打开后，就能用同一份饭单抽签。</p>
+      <p>把这个地址发给伙伴，大家打开的是同一个午餐抽签工具。</p>
       <div class="share-link-row">
         <input id="shareLink" readonly aria-label="菜单分享链接">
         <button id="copyLinkButton" type="button">
@@ -126,7 +126,12 @@
           <span>复制</span>
         </button>
       </div>
-      <p class="dialog-note">每个人后续的增删只保存在自己的浏览器里，不会改到别人。</p>
+      <label class="share-menu-toggle">
+        <input id="shareMenuToggle" type="checkbox">
+        <span class="check-box"></span>
+        <span>同时带上我现在的候选菜单</span>
+      </label>
+      <p class="dialog-note">默认分享短链接；勾选后会把当前饭单编码进链接，适合临时发给饭搭子。</p>
     </form>
   </dialog>
 
