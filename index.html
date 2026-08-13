@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f8f7f2">
+  <meta name="description" content="午餐吃什么？从大家的菜单里随机抽一个。">
+  <title>今天吃什么</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
+  <script src="vendor/tesseract.min.js" defer onload="document.documentElement.dataset.ocrReady='true'" onerror="document.documentElement.dataset.ocrReady='false'"></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <div class="grain" aria-hidden="true"></div>
+  <header class="topbar">
+    <a class="brand" href="./" aria-label="今天吃什么首页">
+      <span class="brand-mark">吃</span>
+      <span>今天吃什么</span>
+    </a>
+    <button class="icon-text-button" id="shareButton" type="button">
+      <i data-lucide="share-2" aria-hidden="true"></i>
+      <span>分享菜单</span>
+    </button>
+  </header>
+
+  <main>
+    <section class="picker-section" aria-labelledby="pickerTitle">
+      <div class="intro">
+        <h1 id="pickerTitle">今天，吃点什么？</h1>
+        <p class="subtitle">选个分类，让今天的饭自己决定。</p>
+      </div>
+
+      <div class="filter-row" id="filterRow" aria-label="午餐类别筛选"></div>
+
+      <div class="result-stage" id="resultStage" aria-live="polite">
+        <div class="result-label">今日签</div>
+        <div class="result-icon" id="resultIcon" aria-hidden="true">🍚</div>
+        <div class="result-name" id="resultName">准备好了吗</div>
+        <div class="result-category" id="resultCategory">从 <span id="candidateCount">0</span> 个选择里抽一个</div>
+        <button class="draw-button" id="drawButton" type="button">
+          <i data-lucide="dices" aria-hidden="true"></i>
+          <span>就吃这个</span>
+        </button>
+        <button class="draw-again" id="drawAgainButton" type="button" hidden>
+          <i data-lucide="rotate-ccw" aria-hidden="true"></i>
+          <span>再给一次机会</span>
+        </button>
+      </div>
+
+      <label class="avoid-toggle">
+        <input id="avoidRecent" type="checkbox" checked>
+        <span class="toggle-track"><span></span></span>
+        <span>避开最近 3 次结果</span>
+      </label>
+    </section>
+
+    <section class="menu-section" aria-labelledby="menuTitle">
+      <div class="section-heading">
+        <div>
+          <p class="section-kicker">我们的饭单</p>
+          <h2 id="menuTitle">候选菜单</h2>
+        </div>
+        <div class="heading-actions">
+          <span class="count-pill" id="totalCount">0 个选择</span>
+          <button class="import-button" id="importButton" type="button">
+            <i data-lucide="file-down" aria-hidden="true"></i>
+            <span>导入外卖</span>
+          </button>
+        </div>
+      </div>
+
+      <form class="add-form" id="addForm">
+        <label class="sr-only" for="foodName">添加午餐选项</label>
+        <input id="foodName" name="foodName" maxlength="18" autocomplete="off" placeholder="加一个想吃的，比如：隆江猪脚饭" required>
+        <label class="sr-only" for="foodCategory">类别</label>
+        <select id="foodCategory" name="foodCategory" aria-label="午餐类别"></select>
+        <button type="submit" class="add-button">
+          <i data-lucide="plus" aria-hidden="true"></i>
+          <span>加入饭单</span>
+        </button>
+      </form>
+
+      <div class="menu-list" id="menuList"></div>
+      <div class="menu-actions">
+        <button class="quiet-button" id="resetButton" type="button">
+          <i data-lucide="refresh-cw" aria-hidden="true"></i>
+          <span>恢复默认</span>
+        </button>
+      </div>
+    </section>
+
+    <section class="history-section" id="historySection" aria-labelledby="historyTitle" hidden>
+      <div class="section-heading compact-heading">
+        <div>
+          <p class="section-kicker">最近吃过</p>
+          <h2 id="historyTitle">午饭足迹</h2>
+        </div>
+        <button class="quiet-button" id="clearHistoryButton" type="button">清空</button>
+      </div>
+      <ol class="history-list" id="historyList"></ol>
+    </section>
+  </main>
+
+  <footer>
+    <p>好好吃饭，下午见。</p>
+  </footer>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <dialog class="share-dialog" id="shareDialog">
+    <form method="dialog" class="dialog-inner">
+      <button class="dialog-close" value="cancel" aria-label="关闭分享窗口">
+        <i data-lucide="x" aria-hidden="true"></i>
+      </button>
+      <div class="dialog-icon"><i data-lucide="users" aria-hidden="true"></i></div>
+      <h2>叫上饭搭子</h2>
+      <p>链接里带着你现在的候选菜单。伙伴打开后，就能用同一份饭单抽签。</p>
+      <div class="share-link-row">
+        <input id="shareLink" readonly aria-label="菜单分享链接">
+        <button id="copyLinkButton" type="button">
+          <i data-lucide="copy" aria-hidden="true"></i>
+          <span>复制</span>
+        </button>
+      </div>
+      <p class="dialog-note">每个人后续的增删只保存在自己的浏览器里，不会改到别人。</p>
+    </form>
+  </dialog>
+
+  <dialog class="import-dialog" id="importDialog">
+    <div class="dialog-inner import-inner">
+      <button class="dialog-close" id="closeImportButton" type="button" aria-label="关闭导入窗口">
+        <i data-lucide="x" aria-hidden="true"></i>
+      </button>
+      <div class="import-heading">
+        <div class="dialog-icon"><i data-lucide="shopping-bag" aria-hidden="true"></i></div>
+        <div>
+          <p class="section-kicker">美团 · 饿了么</p>
+          <h2>导入外卖记录</h2>
+        </div>
+      </div>
+
+      <div class="import-tabs" role="tablist" aria-label="导入方式">
+        <button class="import-tab active" id="pasteTab" type="button" role="tab" aria-selected="true" data-import-tab="paste">
+          <i data-lucide="clipboard-paste" aria-hidden="true"></i><span>粘贴订单文字</span>
+        </button>
+        <button class="import-tab" id="imageTab" type="button" role="tab" aria-selected="false" data-import-tab="image">
+          <i data-lucide="scan-text" aria-hidden="true"></i><span>识别订单截图</span>
+        </button>
+      </div>
+
+      <div class="import-panel" id="pastePanel" role="tabpanel" aria-labelledby="pasteTab">
+        <textarea id="orderText" rows="8" placeholder="在美团或饿了么订单页复制内容，然后粘贴到这里…"></textarea>
+        <button class="primary-action" id="parseTextButton" type="button">
+          <i data-lucide="list-filter" aria-hidden="true"></i><span>识别候选商家</span>
+        </button>
+      </div>
+
+      <div class="import-panel" id="imagePanel" role="tabpanel" aria-labelledby="imageTab" hidden>
+        <label class="upload-zone" for="orderImages">
+          <i data-lucide="image-up" aria-hidden="true"></i>
+          <strong>选择订单截图</strong>
+          <span>可以一次选择多张；图片只在当前浏览器里识别</span>
+        </label>
+        <input class="sr-only" id="orderImages" type="file" accept="image/*" multiple>
+        <div class="ocr-progress" id="ocrProgress" hidden>
+          <div class="progress-track"><span id="progressBar"></span></div>
+          <p id="progressText">正在准备识别…</p>
+        </div>
+      </div>
+
+      <section class="import-preview" id="importPreview" aria-labelledby="previewTitle" hidden>
+        <div class="preview-heading">
+          <div>
+            <h3 id="previewTitle">确认要加入的选项</h3>
+            <p>系统会尽量找出商家名；不需要的内容取消勾选即可。</p>
+          </div>
+          <button class="quiet-button" id="toggleCandidatesButton" type="button">取消全选</button>
+        </div>
+        <div class="candidate-list" id="candidateList"></div>
+        <div class="import-footer">
+          <label>统一分类
+            <select id="importCategory" aria-label="导入选项分类"></select>
+          </label>
+          <button class="primary-action" id="confirmImportButton" type="button">
+            <i data-lucide="plus" aria-hidden="true"></i><span>加入饭单</span>
+          </button>
+        </div>
+      </section>
+    </div>
+  </dialog>
+</body>
+</html>
