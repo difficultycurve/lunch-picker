@@ -1,4 +1,4 @@
-const categories = [
+const defaultCategories = [
   { id: "all", label: "全部", icon: "🍽️" },
   { id: "rice", label: "米饭", icon: "🍚" },
   { id: "noodle", label: "面食", icon: "🍜" },
@@ -28,7 +28,7 @@ const defaultFoods = [
   { id: "f18", name: "披萨", category: "fast", emoji: "🍕" }
 ];
 
-const STORAGE = { foods: "lunch-picker-foods-v1", history: "lunch-picker-history-v1" };
+const STORAGE = { foods: "lunch-picker-foods-v1", history: "lunch-picker-history-v1", categories: "lunch-picker-categories-v1" };
 const $ = (selector) => document.querySelector(selector);
 const els = {
   filterRow: $("#filterRow"), resultStage: $("#resultStage"), resultIcon: $("#resultIcon"),
@@ -45,14 +45,18 @@ const els = {
   orderImages: $("#orderImages"), ocrProgress: $("#ocrProgress"), progressBar: $("#progressBar"),
   progressText: $("#progressText"), importPreview: $("#importPreview"), candidateList: $("#candidateList"),
   toggleCandidatesButton: $("#toggleCandidatesButton"), importCategory: $("#importCategory"),
-  confirmImportButton: $("#confirmImportButton")
+  confirmImportButton: $("#confirmImportButton"), categoryDialog: $("#categoryDialog"),
+  closeCategoryButton: $("#closeCategoryButton"), categoryAddForm: $("#categoryAddForm"),
+  categoryIcon: $("#categoryIcon"), categoryName: $("#categoryName"), categoryList: $("#categoryList")
 };
 
+let categories = loadCategories();
 let foods = loadFoods();
 let history = loadHistory();
 let activeCategory = "all";
 let drawing = false;
 let importCandidates = [];
+let categoryEditTimer;
 
 const importNoise = [
   /^(订单|订单详情|全部订单|外卖|美团|美团外卖|饿了么|饿了么外卖|首页|消息|我的|评价|再来一单|已完成|已送达|已取消|配送中|待付款|待收货|联系商家|申请售后|查看详情|展开|收起|商家配送|平台配送|准时宝|隐私号|号码保护|放心吃|红包|优惠券|配送费|打包费|餐盒费|实付|合计|小计|共\s*\d+\s*件|删除订单)$/i,
@@ -69,14 +73,34 @@ function parseSharedFoods() {
   try {
     const json = decodeURIComponent(Array.from(atob(data.replace(/-/g, "+").replace(/_/g, "/")), c => `%${c.charCodeAt(0).toString(16).padStart(2, "0")}`).join(""));
     const parsed = JSON.parse(json);
-    if (!Array.isArray(parsed) || !parsed.length) return null;
-    return parsed.filter(item => item && typeof item.name === "string" && categories.some(c => c.id === item.category)).slice(0, 100).map((item, index) => ({
+    const sharedCategories = Array.isArray(parsed?.categories) ? sanitizeCategories(parsed.categories) : null;
+    const sharedFoods = Array.isArray(parsed) ? parsed : parsed?.foods;
+    if (sharedCategories?.length) {
+      categories = sharedCategories;
+      saveCategories();
+    }
+    if (!Array.isArray(sharedFoods) || !sharedFoods.length) return null;
+    return sharedFoods.filter(item => item && typeof item.name === "string" && categories.some(c => c.id === item.category)).slice(0, 100).map((item, index) => ({
       id: `shared-${Date.now()}-${index}`,
       name: item.name.slice(0, 18),
       category: item.category,
       emoji: item.emoji || categoryOf(item.category).icon
     }));
   } catch { return null; }
+}
+
+function sanitizeCategories(items) {
+  const cleaned = items.filter(item => item && typeof item.id === "string" && typeof item.label === "string")
+    .slice(0, 30).map(item => ({ id: item.id.slice(0, 40), label: item.label.slice(0, 8), icon: String(item.icon || "🍽️").slice(0, 4) }));
+  const withoutAll = cleaned.filter(item => item.id !== "all");
+  return [{ id: "all", label: "全部", icon: "🍽️" }, ...withoutAll];
+}
+
+function loadCategories() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE.categories));
+    return Array.isArray(saved) && saved.length > 1 ? sanitizeCategories(saved) : structuredClone(defaultCategories);
+  } catch { return structuredClone(defaultCategories); }
 }
 
 function loadFoods() {
@@ -102,20 +126,29 @@ function loadHistory() {
 
 function saveFoods() { localStorage.setItem(STORAGE.foods, JSON.stringify(foods)); }
 function saveHistory() { localStorage.setItem(STORAGE.history, JSON.stringify(history)); }
+function saveCategories() { localStorage.setItem(STORAGE.categories, JSON.stringify(categories)); }
 function categoryOf(id) { return categories.find(c => c.id === id) || categories[0]; }
 function candidates() { return activeCategory === "all" ? foods : foods.filter(food => food.category === activeCategory); }
 
 function renderFilters() {
   els.filterRow.innerHTML = categories.map(category => `
     <button class="filter-button ${category.id === activeCategory ? "active" : ""}" type="button" data-category="${category.id}">
-      ${category.icon} ${category.label}
-    </button>`).join("");
+      ${escapeHtml(category.icon)} ${escapeHtml(category.label)}
+    </button>`).join("") + `
+    <button class="manage-category-button" type="button" data-manage-categories aria-label="管理分类" title="管理分类">
+      <i data-lucide="settings-2" aria-hidden="true"></i>
+    </button>`;
+  refreshIcons();
 }
 
 function renderCategorySelect() {
-  const options = categories.filter(c => c.id !== "all").map(c => `<option value="${c.id}">${c.icon} ${c.label}</option>`).join("");
+  const currentFoodCategory = els.foodCategory.value;
+  const currentImportCategory = els.importCategory.value;
+  const options = categories.filter(c => c.id !== "all").map(c => `<option value="${c.id}">${escapeHtml(c.icon)} ${escapeHtml(c.label)}</option>`).join("");
   els.foodCategory.innerHTML = options;
   els.importCategory.innerHTML = options;
+  if (categories.some(c => c.id === currentFoodCategory)) els.foodCategory.value = currentFoodCategory;
+  if (categories.some(c => c.id === currentImportCategory)) els.importCategory.value = currentImportCategory;
 }
 
 function renderMenu() {
@@ -229,13 +262,101 @@ function resetFoods() {
   showToast("已恢复默认饭单");
 }
 
+function openCategoryManager() {
+  renderCategoryManager();
+  els.categoryDialog.showModal();
+}
+
+function renderCategoryManager() {
+  els.categoryList.innerHTML = categories.filter(category => category.id !== "all").map(category => {
+    const usage = foods.filter(food => food.category === category.id).length;
+    return `
+      <div class="category-row" data-category-row="${category.id}">
+        <input class="category-row-icon" value="${escapeHtml(category.icon)}" maxlength="4" aria-label="${escapeHtml(category.label)}分类图标" data-category-icon="${category.id}">
+        <div>
+          <input class="category-row-name" value="${escapeHtml(category.label)}" maxlength="8" aria-label="分类名称" data-category-name="${category.id}">
+          <div class="category-usage">${usage} 个选择</div>
+        </div>
+        <button class="category-delete-button" type="button" data-delete-category="${category.id}" aria-label="删除${escapeHtml(category.label)}分类" title="删除分类">
+          <i data-lucide="trash-2" aria-hidden="true"></i>
+        </button>
+      </div>`;
+  }).join("");
+  refreshIcons();
+}
+
+function addCategory(event) {
+  event.preventDefault();
+  const label = els.categoryName.value.trim();
+  const icon = els.categoryIcon.value.trim() || "🍽️";
+  if (!label) return;
+  if (categories.some(category => category.label.toLowerCase() === label.toLowerCase())) return showToast("这个分类已经有了");
+  categories.push({ id: `custom-${Date.now()}`, label: label.slice(0, 8), icon: icon.slice(0, 4) });
+  saveCategories();
+  els.categoryName.value = "";
+  renderCategoryManager();
+  refreshCategoryUi();
+  if (!els.categoryDialog.open) els.categoryDialog.showModal();
+  els.categoryName.focus();
+  showToast(`已添加分类：${label}`);
+}
+
+function updateCategory(id, field, value) {
+  const category = categories.find(item => item.id === id);
+  if (!category) return;
+  const cleaned = value.trim();
+  if (!cleaned) {
+    renderCategoryManager();
+    return showToast(field === "label" ? "分类名称不能为空" : "图标不能为空");
+  }
+  if (field === "label" && categories.some(item => item.id !== id && item.label.toLowerCase() === cleaned.toLowerCase())) {
+    renderCategoryManager();
+    return showToast("分类名称不能重复");
+  }
+  category[field] = cleaned.slice(0, field === "label" ? 8 : 4);
+  saveCategories();
+  refreshCategoryUi();
+}
+
+function deleteCategory(id) {
+  const category = categories.find(item => item.id === id);
+  if (!category) return;
+  const usedFoods = foods.filter(food => food.category === id);
+  let targetId = categories.find(item => item.id !== "all" && item.id !== id)?.id;
+  if (usedFoods.length) {
+    const alternatives = categories.filter(item => item.id !== "all" && item.id !== id);
+    if (!alternatives.length) return showToast("至少需要另一个分类来接收这些食物");
+    const choices = alternatives.map(item => `${item.label}`).join("、");
+    const answer = prompt(`“${category.label}”里有 ${usedFoods.length} 个选择。请输入要迁移到的分类名称：\n${choices}`, alternatives[0].label);
+    if (answer === null) return;
+    const target = alternatives.find(item => item.label.toLowerCase() === answer.trim().toLowerCase());
+    if (!target) return showToast("没有找到这个目标分类");
+    targetId = target.id;
+    foods.forEach(food => { if (food.category === id) food.category = targetId; });
+    saveFoods();
+  }
+  categories = categories.filter(item => item.id !== id);
+  if (activeCategory === id) activeCategory = "all";
+  saveCategories();
+  renderCategoryManager();
+  refreshCategoryUi();
+  showToast(`已删除分类：${category.label}`);
+}
+
+function refreshCategoryUi() {
+  renderCategorySelect();
+  renderFilters();
+  renderMenu();
+}
+
 function createShareUrl(includeMenu = false) {
   const url = new URL(location.href);
   url.search = "";
   url.hash = "";
   if (!includeMenu) return url.toString();
-  const compact = foods.map(({ name, category, emoji }) => ({ name, category, emoji }));
-  const bytes = encodeURIComponent(JSON.stringify(compact)).replace(/%([0-9A-F]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+  const compactFoods = foods.map(({ name, category, emoji }) => ({ name, category, emoji }));
+  const compactCategories = categories.filter(item => item.id !== "all");
+  const bytes = encodeURIComponent(JSON.stringify({ foods: compactFoods, categories: compactCategories })).replace(/%([0-9A-F]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
   const encoded = btoa(bytes).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   url.searchParams.set("menu", encoded);
   return url.toString();
@@ -412,6 +533,7 @@ function showToast(message) {
 function refreshIcons() { if (window.lucide) window.lucide.createIcons(); }
 
 els.filterRow.addEventListener("click", event => {
+  if (event.target.closest("[data-manage-categories]")) return openCategoryManager();
   const button = event.target.closest("[data-category]");
   if (!button) return;
   activeCategory = button.dataset.category;
@@ -449,6 +571,24 @@ els.orderImages.addEventListener("change", recognizeOrderImages);
 els.toggleCandidatesButton.addEventListener("click", toggleCandidates);
 els.candidateList.addEventListener("change", updateCandidateToggle);
 els.confirmImportButton.addEventListener("click", confirmImport);
+els.closeCategoryButton.addEventListener("click", () => els.categoryDialog.close());
+els.categoryDialog.addEventListener("click", event => {
+  if (event.target === els.categoryDialog) els.categoryDialog.close();
+});
+els.categoryAddForm.addEventListener("submit", addCategory);
+els.categoryList.addEventListener("input", event => {
+  const nameInput = event.target.closest("[data-category-name]");
+  const iconInput = event.target.closest("[data-category-icon]");
+  clearTimeout(categoryEditTimer);
+  categoryEditTimer = setTimeout(() => {
+    if (nameInput) updateCategory(nameInput.dataset.categoryName, "label", nameInput.value);
+    if (iconInput) updateCategory(iconInput.dataset.categoryIcon, "icon", iconInput.value);
+  }, 220);
+});
+els.categoryList.addEventListener("click", event => {
+  const button = event.target.closest("[data-delete-category]");
+  if (button) deleteCategory(button.dataset.deleteCategory);
+});
 
 renderCategorySelect();
 renderFilters();

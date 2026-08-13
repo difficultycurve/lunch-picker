@@ -9,10 +9,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20260813-2">
+  <link rel="stylesheet" href="styles.css?v=20260813-3">
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
   <script src="vendor/tesseract.min.js" defer onload="document.documentElement.dataset.ocrReady='true'" onerror="document.documentElement.dataset.ocrReady='false'"></script>
-  <script src="app.js?v=20260813-2" defer></script>
+  <script src="app.js?v=20260813-3" defer></script>
 </head>
 <body>
   <div class="grain" aria-hidden="true"></div>
@@ -195,6 +195,34 @@
           </button>
         </div>
       </section>
+    </div>
+  </dialog>
+
+  <dialog class="category-dialog" id="categoryDialog" aria-labelledby="categoryDialogTitle">
+    <div class="dialog-inner category-inner">
+      <button class="dialog-close" id="closeCategoryButton" type="button" aria-label="关闭分类管理">
+        <i data-lucide="x" aria-hidden="true"></i>
+      </button>
+      <div class="import-heading">
+        <div class="dialog-icon category-dialog-icon"><i data-lucide="tags" aria-hidden="true"></i></div>
+        <div>
+          <p class="section-kicker">整理饭单</p>
+          <h2 id="categoryDialogTitle">管理分类</h2>
+        </div>
+      </div>
+      <form class="category-add-form" id="categoryAddForm">
+        <label class="emoji-input-wrap">
+          <span class="sr-only">分类图标</span>
+          <input id="categoryIcon" maxlength="4" value="🍽️" aria-label="分类图标">
+        </label>
+        <label class="category-name-wrap">
+          <span class="sr-only">新分类名称</span>
+          <input id="categoryName" maxlength="8" placeholder="新分类名称" required>
+        </label>
+        <button class="primary-action" type="submit"><i data-lucide="plus" aria-hidden="true"></i><span>添加</span></button>
+      </form>
+      <div class="category-list" id="categoryList"></div>
+      <p class="dialog-note category-note">修改名称或图标后自动保存。删除有食物的分类时，可先选择迁移目标。</p>
     </div>
   </dialog>
 </body>
